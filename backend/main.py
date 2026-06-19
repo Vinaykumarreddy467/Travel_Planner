@@ -18,7 +18,8 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from groq import AsyncGroq
 import os
@@ -42,6 +43,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ──────────────────────────────────────────
+#  SERVE BUILT FRONTEND (for production)
+# ──────────────────────────────────────────
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend", "dist")
+if os.path.isdir(FRONTEND_DIR):
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")), name="assets")
+    print(f"[server] serving built frontend from {FRONTEND_DIR}")
+else:
+    print("[server] frontend/dist not found — API only (run 'cd frontend && npm run build' to build UI)")
 
 # ──────────────────────────────────────────
 #  DATA MODELS (what the API expects/returns)
@@ -315,3 +326,14 @@ async def chat_stream(request: ChatRequest):
             yield f"data: {json.dumps({'done': True})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+# ──────────────────────────────────────────
+#  SPA CATCH-ALL (must be last route)
+# ──────────────────────────────────────────
+if os.path.isdir(FRONTEND_DIR):
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        """Serve the React app for any non-API path."""
+        file_path = os.path.join(FRONTEND_DIR, "index.html")
+        return FileResponse(file_path, media_type="text/html")
