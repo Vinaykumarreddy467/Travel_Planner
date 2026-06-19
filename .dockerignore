@@ -1,0 +1,11 @@
+.git/
+venv/
+frontend/node_modules/
+__pycache__/
+*.pyc
+.env
+.env.example
+.gitignore
+README.md
+planner.ipynb
+output/
