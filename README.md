@@ -1,43 +1,44 @@
-# 🧳 AI Travel Planner
+# AI Travel Planner
 
-AI travel planning chat app with a React frontend and a FastAPI backend. It uses **Groq** for responses, **OpenWeatherMap** for weather-aware context, and **OpenStreetMap / Nominatim / Overpass** for real place lookups.
+AI travel planning chat app with a React frontend and a FastAPI backend. Responses stream word-by-word via SSE. Uses **Groq** for LLM responses, **Google Maps Places API (New)** for place data (with **OpenStreetMap** fallback), and **OpenWeatherMap** for weather-aware context.
 
 ## Features
 
-- 🤖 **Chat-based trip planning** — ask for itineraries, destination ideas, or travel advice
-- 🌤️ **Weather-aware suggestions** — the backend adds forecast context when it can
-- 📍 **Real place references** — attractions, restaurants, and hotels come from OpenStreetMap data
-- 💬 **Conversation history** — the frontend keeps the chat thread in sync with the backend
-- 🔁 **Local dev proxy** — Vite forwards `/chat` requests to FastAPI on port `8000`
+- **Streaming chat** — responses appear token-by-token as Groq generates them
+- **Google Maps places** — real attractions, restaurants, and hotels with ratings, price levels, and open/closed status
+- **Automatic fallback** — if Google Maps is unavailable, seamlessly falls back to OpenStreetMap (Nominatim + Overpass)
+- **Weather-aware suggestions** — backend adds forecast context when a destination is detected
+- **Conversation history** — the frontend keeps the chat thread in sync with the backend
+- **Premium dark theme** — amber-and-emerald design with pill-shaped suggestion chips, smooth animations, copy-to-clipboard
 
 ## What You Need
 
 | Service | Purpose | Cost |
 |---|---|---|
-| **Groq** | LLM responses | Free tier available |
+| **Groq** | LLM responses (streaming) | Free tier available |
+| **Google Maps Places API (New)** | Place lookup (ratings, prices, hours) | $200/month free credit |
 | **OpenWeatherMap** | Weather forecast context | Free tier available |
-| **OpenStreetMap / Nominatim / Overpass** | Place lookup data | Free |
+| **OpenStreetMap** | Fallback place data (no API key needed) | Free |
 
 ## Environment Variables
 
-Create a `.env` file in the project root with at least:
+Create a `.env` file in the project root (copy from `.env.example`):
 
-- `GROQ_API_KEY` - required for chat responses
-- `GROQ_MODEL` - optional, defaults to `llama-3.3-70b-versatile`
-- `OWM_API_KEY` - optional, enables weather context
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GROQ_API_KEY` | Yes | — | API key for Groq LLM |
+| `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | Groq model to use |
+| `OWM_API_KEY` | No | — | Enables weather forecast context |
+| `GOOGLE_MAPS_API_KEY` | No | — | Enables Google Maps places (falls back to OSM if absent) |
 
 ## Setup
 
 ### 1. Install dependencies
 
 ```bash
-cd /home/mikealson/Open Work/travel-planner
-
-python -m venv .venv
-source .venv/bin/activate
-
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-pip install fastapi uvicorn
 
 cd frontend
 npm install
@@ -48,17 +49,17 @@ cd ..
 
 ```bash
 cp .env.example .env
-# Edit .env and add your keys
+# Edit .env and add your keys (at minimum GROQ_API_KEY)
 ```
 
-### 3. Start the backend
+### 3. Start the backend (port 8000)
 
 ```bash
-source .venv/bin/activate
-uvicorn backend.main:app --reload --port 8000
+source venv/bin/activate
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 4. Start the frontend
+### 4. Start the frontend (port 5173)
 
 ```bash
 cd frontend
@@ -69,32 +70,75 @@ Open the Vite URL shown in the terminal, usually `http://localhost:5173`.
 
 ## How It Works
 
-The React app sends chat messages to `POST /chat`. The FastAPI backend builds a travel-planning prompt, adds optional weather and place context, and sends the request to Groq. If place data is available, the reply also includes OpenStreetMap links.
+1. The user types a message in the React chat UI.
+2. The frontend sends `POST /chat` with `{ "message": "...", "history": [...] }`.
+3. The backend extracts the destination (e.g. "Paris"), fetches weather and places in parallel, then builds a system prompt with that context.
+4. The backend calls Groq with `stream=True` and pipes each token back as a Server-Sent Event.
+5. After the AI text, the backend appends a "Google Maps references" (or "OpenStreetMap references") section with clickable map links.
+6. The frontend renders text as it arrives, then displays the maps section and a Copy button.
+
+### Streaming format (SSE)
+
+```
+data: {"chunk":"Paris"}
+data: {"chunk":" is"}
+data: {"chunk":" wonderful"}
+data: {"maps":"Google Maps references:\n- Eiffel Tower: https://..."}
+data: {"done":true}
+```
+
+## Place lookup fallback chain
+
+```
+Search places
+  ├── Google Maps Places API (New) ── has results? → ✅ return
+  │                                    empty/error? → ⬇️ fall through
+  └── OpenStreetMap (Nominatim + Overpass) → return results
+```
 
 ## Project Structure
 
 ```text
 travel-planner/
 ├── backend/
-│   └── main.py        # FastAPI chat API
+│   └── main.py              # FastAPI chat API with SSE streaming
 ├── frontend/
-│   ├── src/
-│   │   ├── App.jsx    # Chat UI
-│   │   └── App.css    # App styling
-│   ├── package.json   # Frontend dependencies and scripts
-│   └── vite.config.js # Dev server proxy to backend
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js       # Dev proxy /chat → localhost:8000
+│   └── src/
+│       ├── main.jsx
+│       ├── App.jsx          # Chat UI with SSE reader, linkify, copy
+│       └── App.css          # Premium dark theme
 ├── src/
-│   ├── config.py      # Environment loading
-│   ├── models.py      # Shared data models
-│   ├── weather.py     # OpenWeatherMap integration
-│   ├── places.py      # OpenStreetMap place lookup
-│   └── llm_client.py  # Groq client helpers
-├── planner.ipynb      # Legacy notebook / exploration
-├── requirements.txt   # Python dependencies
-└── output/            # Generated artifacts
+│   ├── config.py            # Environment variables (from .env)
+│   ├── models.py            # Pydantic data models
+│   ├── google_maps.py       # Google Maps Places API (New) client
+│   ├── places.py            # Place lookup (GMaps → OSM fallback chain)
+│   ├── weather.py           # OpenWeatherMap forecast + advice
+│   ├── llm_client.py        # Groq LLM client helpers
+│   └── planner.py           # Orchestrator combining all sources
+├── planner.ipynb            # Legacy exploration notebook
+├── .env.example             # Template for environment variables
+├── .gitignore
+├── requirements.txt
+└── README.md
 ```
 
 ## Backend Endpoint
 
-- `GET /` returns a simple health check
-- `POST /chat` accepts `{ "message": "...", "history": [...] }` and returns `{ "reply": "..." }`
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/` | Health check (`{"status":"ok","app":"AI Travel Planner"}`) |
+| `POST` | `/chat` | Send a message, receive SSE stream (see format above) |
+
+The `/chat` endpoint accepts:
+```json
+{
+  "message": "Plan a 5-day trip to Tokyo",
+  "history": [
+    {"role": "user", "content": "I love sushi"},
+    {"role": "assistant", "content": "Great! Let's plan..."}
+  ]
+}
+```
