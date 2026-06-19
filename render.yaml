@@ -1,14 +1,11 @@
 services:
   - type: web
     name: travel-planner
-    runtime: python
+    runtime: docker
     repo: https://github.com/Vinaykumarreddy467/Travel_Planner.git
     plan: free
     region: oregon
-    buildCommand: |
-      pip install -r requirements.txt
-      cd frontend && npm install && npm run build
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    branch: main
     envVars:
       - key: GROQ_API_KEY
         sync: false
