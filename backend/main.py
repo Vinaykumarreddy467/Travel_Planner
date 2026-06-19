@@ -227,8 +227,8 @@ def build_maps_section(destination: str, attractions, restaurants, hotels) -> st
 # ──────────────────────────────────────────
 
 
-@app.get("/")
-def root():
+@app.get("/health")
+def health():
     """Health check - confirms the server is running."""
     return {"status": "ok", "app": "AI Travel Planner"}
 
