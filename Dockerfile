@@ -24,4 +24,5 @@ RUN cd frontend && npm install && npm run build
 EXPOSE 8000
 
 # Run the backend (it serves the built frontend too)
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Uses $PORT so Render's dynamic port assignment works
+CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}
