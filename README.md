@@ -68,6 +68,49 @@ npm run dev
 
 Open the Vite URL shown in the terminal, usually `http://localhost:5173`.
 
+## Run in Production (single command)
+
+Build the frontend and serve everything from FastAPI on one port:
+
+```bash
+# Build the React app
+cd frontend && npm install && npm run build && cd ..
+
+# Start the unified server (API + UI at http://localhost:8000)
+source venv/bin/activate
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+Visit **http://localhost:8000** — the chat UI is served directly by FastAPI.
+
+## Deploy to Render (free)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+### One-click deploy
+
+1. Fork or push this repo to GitHub
+2. Go to [dashboard.render.com](https://dashboard.render.com)
+3. Click **New +** → **Blueprint**
+4. Connect your GitHub repo
+5. Render auto-detects `render.yaml` — click **Apply**
+6. After deploy, add your API keys in the **Environment** section:
+   - `GROQ_API_KEY` (required)
+   - `GOOGLE_MAPS_API_KEY` (optional, enables Google Maps places)
+   - `OWM_API_KEY` (optional, enables weather context)
+7. Click **Manual Deploy** → **Clear build cache & deploy**
+
+Your app will be at `https://travel-planner.onrender.com`.
+
+### Or deploy with Docker locally
+
+```bash
+docker build -t travel-planner .
+docker run -p 8000:8000 --env-file .env travel-planner
+```
+
+Visit **http://localhost:8000**.
+
 ## How It Works
 
 1. The user types a message in the React chat UI.
@@ -125,11 +168,12 @@ travel-planner/
 └── README.md
 ```
 
-## Backend Endpoint
+## API Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/` | Health check (`{"status":"ok","app":"AI Travel Planner"}`) |
+| `GET` | `/` | Serves the React chat UI (when frontend is built) |
+| `GET` | `/health` | Health check (`{"status":"ok","app":"AI Travel Planner"}`) |
 | `POST` | `/chat` | Send a message, receive SSE stream (see format above) |
 
 The `/chat` endpoint accepts:
@@ -141,4 +185,13 @@ The `/chat` endpoint accepts:
     {"role": "assistant", "content": "Great! Let's plan..."}
   ]
 }
+```
+
+Returns a Server-Sent Events stream:
+```
+data: {"chunk":"Tokyo"}
+data: {"chunk":" is"}
+data: {"chunk":" incredible"}
+data: {"maps":"Google Maps references:\n- ..."}
+data: {"done":true}
 ```
